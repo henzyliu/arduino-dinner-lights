@@ -1,7 +1,13 @@
 /*Includes*/
 #include <WiFi.h>
+#include "config.h"
+#include "Adafruit_MQTT.h"
+#include "Adafruit_MQTT_Client.h"
 
-/*Defines*/
+/*Macros*/
+#define AIO_SERVER      "io.adafruit.com"
+#define AIO_SERVERPORT  1883
+
 #define SERIAL_SPEED 115200
 
 #define LED_PIN 2
@@ -9,10 +15,11 @@
 #define PUSH_BUTTON 0
 
 /*Global Variables*/
-const char* ssid = "Liu Family";
-const char* password = "1a2s3h4l5e6y7";
-
 bool ledStatus = HIGH;
+
+WiFiClient client;
+Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, IO_USERNAME, IO_KEY);
+Adafruit_MQTT_Subscribe dinnerTimeFeed = Adafruit_MQTT_Subscribe(&mqtt, IO_USERNAME "/feeds/dinnertime");
 
 void onWiFiConnected(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println("Connected to AP successfully!");
@@ -29,7 +36,7 @@ void onWiFiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.print("WiFi lost connection. Reason: ");
   Serial.println(info.wifi_sta_disconnected.reason);
   Serial.println("Trying to Reconnect");
-  WiFi.begin(ssid, password);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 }
 
 void flickerLights() {
@@ -50,11 +57,31 @@ void flickerLights() {
   ledStatus = previousLedStatus;
 }
 
+void MQTT_connect() {
+  int8_t ret;
+
+  // Stop if already connected.
+  if (mqtt.connected()) {
+    return;
+  }
+
+  Serial.print("Connecting to MQTT... ");
+
+  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+       Serial.println(mqtt.connectErrorString(ret));
+       Serial.println("Retrying MQTT connection in 5 seconds...");
+       mqtt.disconnect();
+       delay(5000);  // wait 5 seconds
+  }
+  Serial.println("MQTT Connected!");
+}
+
 void setup() {
   Serial.begin(SERIAL_SPEED);
   
   pinMode(LED_PIN, OUTPUT);
   pinMode(PUSH_BUTTON, INPUT);
+  digitalWrite(LED_PIN, ledStatus);
   
   // delete old config
   WiFi.disconnect(true);
@@ -65,9 +92,10 @@ void setup() {
   WiFi.onEvent(onWiFiGotIP, ARDUINO_EVENT_WIFI_STA_GOT_IP);
   WiFi.onEvent(onWiFiDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
-  WiFi.begin(ssid, password);
-
-  digitalWrite(LED_PIN, ledStatus);
+  WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  
+  mqtt.subscribe(&dinnerTimeFeed);
 }
 
 void loop() {
@@ -75,4 +103,5 @@ void loop() {
   if (digitalRead(PUSH_BUTTON) == LOW){
     flickerLights();
   }
+  MQTT_connect();
 }
