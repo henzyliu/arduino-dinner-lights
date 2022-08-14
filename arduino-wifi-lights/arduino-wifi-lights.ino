@@ -11,8 +11,7 @@
 #define SERIAL_SPEED 115200
 
 #define LED_PIN 2
-
-#define PUSH_BUTTON 0
+#define EXTERNAL_LED_PIN 23
 
 /*Global Variables*/
 bool ledStatus = HIGH;
@@ -50,6 +49,7 @@ void flickerLights() {
   while (count < repititions) {
     ledStatus = !ledStatus;
     digitalWrite(LED_PIN, ledStatus);
+    digitalWrite(EXTERNAL_LED_PIN, ledStatus);
     count++;
     delay(duration);
   }
@@ -59,19 +59,19 @@ void flickerLights() {
 
 void MQTT_connect() {
   int8_t ret;
-
+  
   // Stop if already connected.
   if (mqtt.connected()) {
     return;
   }
 
-  Serial.print("Connecting to MQTT... ");
-
+  Serial.println("Connecting to MQTT... ");
+  
   while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
        Serial.println(mqtt.connectErrorString(ret));
-       Serial.println("Retrying MQTT connection in 5 seconds...");
+       Serial.println("Retrying MQTT connection in 1 seconds...");
        mqtt.disconnect();
-       delay(5000);  // wait 5 seconds
+       delay(1000);  // wait 1 second
   }
   Serial.println("MQTT Connected!");
 }
@@ -80,8 +80,9 @@ void setup() {
   Serial.begin(SERIAL_SPEED);
   
   pinMode(LED_PIN, OUTPUT);
-  pinMode(PUSH_BUTTON, INPUT);
+  pinMode(EXTERNAL_LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, ledStatus);
+  digitalWrite(EXTERNAL_LED_PIN, ledStatus);
   
   // delete old config
   WiFi.disconnect(true);
@@ -99,9 +100,19 @@ void setup() {
 }
 
 void loop() {
-  delay(500);
-  if (digitalRead(PUSH_BUTTON) == LOW){
-    flickerLights();
-  }
   MQTT_connect();
+
+  delay(1000);
+
+  Adafruit_MQTT_Subscribe *subscription;
+  while ((subscription = mqtt.readSubscription(1000))) {
+    if (subscription == &dinnerTimeFeed) {
+      Serial.print(F("Got: "));
+      char* value = (char*)dinnerTimeFeed.lastread;
+      Serial.println(value);
+      if(*value == '1'){
+        flickerLights();
+      }
+    }
+  }
 }
