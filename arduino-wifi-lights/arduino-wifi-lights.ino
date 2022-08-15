@@ -1,5 +1,6 @@
 /*Includes*/
 #include <WiFi.h>
+  
 #include "config.h"
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h"
@@ -19,6 +20,7 @@ bool ledStatus = HIGH;
 WiFiClient client;
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, IO_USERNAME, IO_KEY);
 Adafruit_MQTT_Subscribe dinnerTimeFeed = Adafruit_MQTT_Subscribe(&mqtt, IO_USERNAME "/feeds/dinnertime");
+Adafruit_MQTT_Subscribe fairyLightState = Adafruit_MQTT_Subscribe(&mqtt, IO_USERNAME "/feeds/ashley-fairy-lights-status");
 
 void onWiFiConnected(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println("Connected to AP successfully!");
@@ -76,6 +78,11 @@ void MQTT_connect() {
   Serial.println("MQTT Connected!");
 }
 
+void updateLights(bool state) {
+  digitalWrite(LED_PIN, state);
+  digitalWrite(EXTERNAL_LED_PIN, state);
+}
+
 void setup() {
   Serial.begin(SERIAL_SPEED);
   
@@ -97,6 +104,7 @@ void setup() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   
   mqtt.subscribe(&dinnerTimeFeed);
+  mqtt.subscribe(&fairyLightState);
 }
 
 void loop() {
@@ -107,12 +115,22 @@ void loop() {
   Adafruit_MQTT_Subscribe *subscription;
   while ((subscription = mqtt.readSubscription(1000))) {
     if (subscription == &dinnerTimeFeed) {
+      Serial.println("Received DinnerTime trigger");
       Serial.print(F("Got: "));
       char* value = (char*)dinnerTimeFeed.lastread;
       Serial.println(value);
       if(*value == '1'){
         flickerLights();
       }
+    }
+    else if (subscription == &fairyLightState) {
+      Serial.println("Received LED status");
+      Serial.print(F("Got: "));
+      Serial.println((char *)fairyLightState.lastread);
+      ledStatus = (atoi((char *)fairyLightState.lastread));
+      updateLights(ledStatus);
+      Serial.print(F("LED Status: "));
+      Serial.println(ledStatus);
     }
   }
 }
